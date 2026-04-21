@@ -7,41 +7,48 @@ from playwright.async_api import async_playwright
 # Precompiled email pattern for efficiency
 EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
+_playwright_instance = None
+_browser_instance = None
+
+async def get_browser():
+    global _playwright_instance, _browser_instance
+    if _browser_instance is None or not _browser_instance.is_connected():
+        _playwright_instance = await async_playwright().start()
+        _browser_instance = await _playwright_instance.chromium.launch(
+            headless=True, args=["--disable-http2"]
+        )
+    return _browser_instance
+
 async def scrape_website(url: str, extract_links: bool = False):
-    """
-    Scrape the given URL using Playwright. If the page contains an iframe, follow its src and scrape that instead.
-    """
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=["--disable-http2"])
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
-                locale="en-US",
-                ignore_https_errors=True,
-                extra_http_headers={
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Referer": "https://www.google.com/"
-                }
-            )
+        browser = await get_browser()
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
+            locale="en-US",
+            ignore_https_errors=True,
+            extra_http_headers={
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://www.google.com/"
+            }
+        )
+        page = await context.new_page()
+        await page.goto(url, timeout=60000, wait_until="domcontentloaded")
 
-            page = await context.new_page()
-            await page.goto(url, timeout=60000, wait_until="domcontentloaded")
+        html_content = await page.content()
 
-            html_content = await page.content()
+        extracted_links = []
+        if extract_links:
+            extracted_links = extract_links_from_html(html_content, page.url)
 
-            extracted_links = []
-            if extract_links:
-                extracted_links = extract_links_from_html(html_content, page.url)  # make sure this is defined
-                
-            # Convert HTML to markdown
-            h = html2text.HTML2Text()
-            h.ignore_links = False
-            h.ignore_images = True
-            h.ignore_tables = True
-            markdown_content = h.handle(html_content)
-            markdown_content = re.sub(r"\n{3,}", "\n\n", markdown_content).strip()
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        h.ignore_images = True
+        h.ignore_tables = True
+        markdown_content = h.handle(html_content)
+        markdown_content = re.sub(r"\n{3,}", "\n\n", markdown_content).strip()
 
-            return markdown_content, extracted_links
+        await context.close()
+        return markdown_content, extracted_links
     except Exception as e:
         print(f"Error scraping website: {e}")
         return None, []

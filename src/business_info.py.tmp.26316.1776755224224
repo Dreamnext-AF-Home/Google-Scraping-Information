@@ -151,33 +151,43 @@ async def get_business_info(
         'email': " || ".join(emails_result.get('emails', '')),
     }
 
-async def process_businesses(excel_file, progress_callback=None):
+async def process_businesses(excel_file, progress_callback=None) :
+    """
+    Process a list of businesses to extract detailed information and update the Excel file.
+    
+    Args:
+        excel_file (str): Path to the Excel file to update
+        
+    Returns:
+        List[Dict]: Enhanced business data with extracted information
+    """
+    # Load the Excel file into a DataFrame
     df, file_path = load_excel_data(excel_file)
-    semaphore = asyncio.Semaphore(5)  # max 5 parallel scrapes at a time
-
-    async def process_one(index, row):
+    
+    # Process each business with a progress bar
+    for index, row in tqdm(df.iterrows(), desc="Processing businesses", unit="business"):
         name = row.get("name", "")
         url = row.get("website", "")
         location = row.get("address", "")
         already_searched = row.get("searched", "")
-
+        
         if not url or already_searched == "YES":
-            return
-
+            continue
+        
         try:
+            # Update UI progress via callback if provided
             if progress_callback and callable(progress_callback):
                 await progress_callback(len(df), index, name)
-
-            async with semaphore:
-                info = await get_business_info(url, name, location)
-
+                
+            # Get business info
+            info = await get_business_info(url, name, location)
+            
+            # Update the business information
             update_business_data(df, index, info)
         except Exception as e:
             print(f"Error processing {name}: {e}")
-
-    tasks = [process_one(index, row) for index, row in df.iterrows()]
-    await asyncio.gather(*tasks)
-
+    
+    # Save the updated DataFrame back to Excel
     try:
         df.to_excel(file_path, index=False)
     except Exception as e:
