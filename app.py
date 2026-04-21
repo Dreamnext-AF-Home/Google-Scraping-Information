@@ -19,7 +19,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# App title and description
 st.title("AI-Powered Google Maps Lead Generator")
 st.markdown(
     """
