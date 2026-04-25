@@ -10,12 +10,27 @@ EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _playwright_instance = None
 _browser_instance = None
 
+# Required for Docker/Linux server environments
+_CHROMIUM_ARGS = [
+    "--disable-http2",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",  # /dev/shm is only 64MB in Docker; use /tmp instead
+    "--disable-gpu",
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+]
+
 async def get_browser():
     global _playwright_instance, _browser_instance
     if _browser_instance is None or not _browser_instance.is_connected():
+        if _playwright_instance is not None:
+            try:
+                await _playwright_instance.stop()
+            except Exception:
+                pass
         _playwright_instance = await async_playwright().start()
         _browser_instance = await _playwright_instance.chromium.launch(
-            headless=True, args=["--disable-http2"]
+            headless=True, args=_CHROMIUM_ARGS
         )
     return _browser_instance
 

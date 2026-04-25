@@ -10,34 +10,39 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36"
 ]
 
+_llm_cache: dict = {}
+
 def get_current_date():
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
 async def ainvoke_llm(
-    model,  # Specify the model name from OpenRouter
+    model,
     system_prompt,
     user_message,
     response_format=None,
     temperature=0.1
 ):
-    llm = ChatOpenAI(
-        model=model, 
-        temperature=temperature,
-        openai_api_key=os.getenv("OPENROUTER_API_KEY"),
-        openai_api_base="https://openrouter.ai/api/v1",
-    )
-    
-    # If Response format is provided, use structured output
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    cache_key = (model, api_key, temperature)
+
+    if cache_key not in _llm_cache:
+        _llm_cache[cache_key] = ChatOpenAI(
+            model=model,
+            temperature=temperature,
+            openai_api_key=api_key,
+            openai_api_base="https://openrouter.ai/api/v1",
+        )
+
+    llm = _llm_cache[cache_key]
+
     if response_format:
         llm = llm.with_structured_output(response_format)
-    
-    # Prepare messages
+
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_message}
     ]
-    
-    # Invoke LLM asynchronously
+
     response = await llm.ainvoke(messages)
-    
-    return response if response_format else response.content  # Return structured response or string
+
+    return response if response_format else response.content
