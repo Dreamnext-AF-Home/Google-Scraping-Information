@@ -178,8 +178,8 @@ async def main_with_progress(location, search_query, num_pages):
     progress_text = st.empty()
 
     async def progress_callback(total, current, business_name):
-        progress_bar.progress((current + 1) / total)
-        progress_text.text(f"Processing: {current + 1}/{total} - {business_name}")
+        progress_bar.progress(current / total if total > 0 else 0)
+        progress_text.text(f"Processing: {current}/{total} - {business_name}")
 
     await process_businesses(file_path, progress_callback=progress_callback)
 
@@ -192,12 +192,18 @@ if submit_button:
     if not os.environ.get("SERPER_API_KEY") or not os.environ.get("OPENROUTER_API_KEY"):
         st.error("Please set your API keys in the sidebar before starting.")
     else:
-        with st.spinner("Starting lead generation..."):
-            excel_path = asyncio.run(main_with_progress(location, search_query, num_pages))
-            if excel_path:
-                st.session_state.excel_path = excel_path
-                st.session_state.last_search_query = search_query
-                st.session_state.last_location = location
+        try:
+            with st.spinner("Starting lead generation..."):
+                excel_path = asyncio.run(main_with_progress(location, search_query, num_pages))
+                if excel_path:
+                    st.session_state.excel_path = excel_path
+                    st.session_state.last_search_query = search_query
+                    st.session_state.last_location = location
+                else:
+                    st.error("Lead generation returned no results. Check that your API keys are valid and the location/query returns results.")
+        except Exception as e:
+            st.error(f"Lead generation failed: {e}")
+            st.exception(e)
 
 # Results section - Always check if the file exists
 if st.session_state.excel_path and os.path.exists(st.session_state.excel_path):
